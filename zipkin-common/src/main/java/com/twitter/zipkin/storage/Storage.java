@@ -1,6 +1,6 @@
 /*
  * Copyright 2012 Twitter Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -14,37 +14,38 @@
  *  limitations under the License.
  *
  */
-package com.twitter.zipkin.storage
+package com.twitter.zipkin.storage;
 
-import com.twitter.util.{Duration, Future}
-import com.twitter.zipkin.common.Span
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Future;
 
-trait Storage {
+public interface Storage {
 
   /**
    * Close the storage
    */
-  def close()
+  void close();
 
   /**
    * Store the span in the underlying storage for later retrieval.
    * @return a future for the operation
    */
-  def storeSpan(span: Span) : Future[Unit]
+  Future<Void> storeSpan(Span span);
 
   /**
    * Set the ttl of a trace. Used to store a particular trace longer than the
    * default. It must be oh so interesting!
    */
-  def setTimeToLive(traceId: Long, ttl: Duration): Future[Unit]
+  Future<Void> setTimeToLive(long traceId, long ttlSeconds);
 
   /**
    * Get the time to live for a specific trace.
    * If there are multiple ttl entries for one trace, pick the lowest one.
    */
-  def getTimeToLive(traceId: Long): Future[Duration]
+  Future<Long> getTimeToLive(long traceId);
 
-  def tracesExist(traceIds: Seq[Long]): Future[Set[Long]]
+  Future<Set<Long>> tracesExist(Long... traceIds);
 
   /**
    * Get the available trace information from the storage system.
@@ -54,11 +55,11 @@ trait Storage {
    * The return list will contain only spans that have been found, thus
    * the return list may not match the provided list of ids.
    */
-  def getSpansByTraceIds(traceIds: Seq[Long]): Future[Seq[Seq[Span]]]
-  def getSpansByTraceId(traceId: Long): Future[Seq[Span]]
+  Future<List<List<Span>>> getSpansByTraceIds(Long... traceIds);
+  Future<List<Span>> getSpansByTraceId(long traceId);
   /**
    * How long do we store the data before we delete it? In seconds.
    */
-  def getDataTimeToLive: Int
+  long getDataTimeToLive();
 
 }
