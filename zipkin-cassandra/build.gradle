@@ -4,6 +4,7 @@ repositories {
 
 dependencies {
     compile project(':zipkin-scrooge')
+    compile project(':zipkin-cassandra-java')
 
     compile 'commons-codec:commons-codec:1.6'
     compile 'org.iq80.snappy:snappy:0.3'

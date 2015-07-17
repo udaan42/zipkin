@@ -45,8 +45,8 @@ include 'zipkin-common',
 /////////////////////////////////////////////////////
 
 'zipkin-zookeeper',
+'zipkin-cassandra-java',
 'zipkin-cassandra',
-'zipkin-cassandra-aggregate',
 'zipkin-anormdb',
 //'zipkin-redis',
 

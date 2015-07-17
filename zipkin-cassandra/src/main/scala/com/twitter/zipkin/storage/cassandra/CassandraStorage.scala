@@ -1,12 +1,12 @@
 /*
  * Copyright 2012 Twitter Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,24 +16,26 @@
 package com.twitter.zipkin.storage.cassandra
 
 import com.twitter.cassie._
+import com.twitter.cassie.codecs.Codec
 import com.twitter.conversions.time._
 import com.twitter.ostrich.stats.Stats
-import com.twitter.util.{Await, Duration, Future}
+import com.twitter.util.{Await, Duration, Future, FuturePool}
 import com.twitter.zipkin.common.Span
 import com.twitter.zipkin.conversions.thrift._
 import com.twitter.zipkin.thriftscala
 import com.twitter.zipkin.storage.Storage
 import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 case class CassandraStorage(
-  keyspace: Keyspace,
-  traces: ColumnFamily[Long, String, thriftscala.Span],
+  repository: org.twitter.zipkin.storage.cassandra.Repository,
   readBatchSize: Int,
-  dataTimeToLive: Duration
+  dataTimeToLive: Duration,
+  spanCodec: Codec[thriftscala.Span]
 ) extends Storage {
 
   def close() {
-    keyspace.close()
+    repository.close()
   }
 
   // storing the span in the traces cf
@@ -55,40 +57,33 @@ case class CassandraStorage(
   // cassandra. so instead we limit it and won't return it. hacky.
   private val TRACE_MAX_COLS = 100000
 
+  private val pool = FuturePool.unboundedPool
+
   def storeSpan(span: Span): Future[Unit] = {
     CASSANDRA_STORE_SPAN.incr
     WRITE_REQUEST_COUNTER.incr()
-    val traceKey = span.traceId
-    val traceCol = Column[String, thriftscala.Span](createSpanColumnName(span), span.toThrift).ttl(dataTimeToLive)
-    traces.insert(traceKey, traceCol).unit
+
+    repository
+      .storeSpan(span.traceId, createSpanColumnName(span), spanCodec.encode(span.toThrift), dataTimeToLive.inSeconds)
+
+    Future.Unit
   }
 
   def setTimeToLive(traceId: Long, ttl: Duration): Future[Unit] = {
-    val rowFuture = traces.getRow(traceId)
-    val batch = traces.batch()
-
-    // fetch each col for trace, change ttl and reinsert
-    // note that we block here
-    Await.result(rowFuture).values().asScala.foreach { value =>
-    // creating a new column in order to set timestamp to None
-      val col = Column[String, thriftscala.Span](value.name, value.value).ttl(ttl)
-      batch.insert(traceId, col)
-    }
-
-    batch.execute().unit
+    // @todo implement
+    Future.Unit
+//    val rowFuture = getSpansByTraceId(traceId)
+//
+//    // fetch each col for trace, change ttl and reinsert
+//    // note that we block here
+//    Await.result(rowFuture).values().asScala.foreach { value =>
+//      repository.storeSpan(value.traceId, createSpanColumnName(value), value.toThrift, ttl)
+//    }
   }
 
   def getTimeToLive(traceId: Long): Future[Duration] = {
-    val rowFuture = traces.getRow(traceId)
-    rowFuture map { rows =>
-    // fetch the
-      val minTtlSec = rows.values().asScala.foldLeft(Int.MaxValue)((ttl: Int, col: Column[String, thriftscala.Span]) =>
-        math.min(ttl, col.ttl.map(_.inSeconds).getOrElse(Int.MaxValue)))
-      if (minTtlSec == Int.MaxValue) {
-        throw new IllegalArgumentException("The trace " + traceId + " does not have any ttl set!")
-      }
-      minTtlSec.seconds
-    }
+    // @todo implement
+    Future(dataTimeToLive)
   }
 
   /**
@@ -100,23 +95,13 @@ case class CassandraStorage(
 
   def tracesExist(traceIds: Seq[Long]): Future[Set[Long]] = {
     CASSANDRA_TRACE_EXISTS.incr
-    Future.collect {
-      traceIds.grouped(readBatchSize).toSeq.map { ids =>
-        traces.multigetRows(ids.toSet.asJava, None, None, Order.Normal, 1).map { rowSet =>
-          ids.flatMap { id =>
-            val spans = rowSet.asScala(id).asScala.map {
-              case (colName, col) => col.value.toSpan
-            }
-            if (spans.isEmpty) {
-              None
-            } else {
-              Some(spans.head.traceId)
-            }
-          }.toSet
-        }
-      }
-    }.map {
-      _.reduce { (left, right) => left ++ right }
+    // @todo  honour readBatchSize
+    pool {
+      repository
+        .tracesExist(traceIds.toArray.map(Long.box))
+        .get
+        .map(_.asInstanceOf[Long])
+        .toSet
     }
   }
 
@@ -132,31 +117,17 @@ case class CassandraStorage(
 
   def getSpansByTraceIds(traceIds: Seq[Long]): Future[Seq[Seq[Span]]] = {
     CASSANDRA_GET_TRACE.incr
-    Future.collect {
-      traceIds.grouped(readBatchSize).toSeq.map { ids =>
-        traces.multigetRows(ids.toSet.asJava, None, None, Order.Normal, TRACE_MAX_COLS).map { rowSet =>
-          ids.flatMap { id =>
-            val spans = rowSet.asScala(id).asScala.map {
-              case (colName, col) => col.value.toSpan
-            }
+    // @todo  honour readBatchSize
+    pool {
+      val spans = repository
+        .getSpansByTraceIds(traceIds.toArray.map(Long.box))
+        .getUninterruptibly
+        .map(row => spanCodec.decode(row.getBytes("value")).toSpan)
+        .toSeq
+        .groupBy(_.traceId)
+        .toMap
 
-            spans.toSeq match {
-              case Nil => {
-                None
-              }
-              case s if s.length > TRACE_MAX_COLS => {
-                CASSANDRA_GET_TRACE_TOO_BIG.incr()
-                None
-              }
-              case s => {
-                Some(s)
-              }
-            }
-          }
-        }
-      }
-    }.map {
-      _.flatten
+      traceIds.map(traceId => spans.get(traceId)).filter(_.isDefined).map(_.get).toSeq
     }
   }
 

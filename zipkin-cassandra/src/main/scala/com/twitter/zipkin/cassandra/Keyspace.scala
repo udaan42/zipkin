@@ -23,9 +23,10 @@ import com.twitter.finagle.tracing.{NullTracer, Tracer}
 import com.twitter.util.Duration
 import java.net.InetSocketAddress
 
+// @deprecated replaced with direct use of Cluster.builder()
 object Keyspace {
   def zookeeperServerSets(
-    keyspaceName: String = "Zipkin",
+    keyspaceName: String = "zipkin",
     hosts: Seq[(String, Int)],
     path: String,
     timeout: Duration,
