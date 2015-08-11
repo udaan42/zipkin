@@ -255,6 +255,8 @@ class CassandraSpanStore(
     }
   }
 
+  override def getDataTimeToLive = Future.value(spanTtl.inSeconds)
+
   def tracesExist(traceIds: Seq[Long]): Future[Set[Long]] = {
     QueryTracesExistStat.add(traceIds.size)
     pool {
