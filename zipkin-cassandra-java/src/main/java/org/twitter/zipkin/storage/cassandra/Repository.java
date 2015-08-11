@@ -280,7 +280,7 @@ public final class Repository implements AutoCloseable {
             for (Row row : session.execute(bound).all()) {
                 long traceId = row.getBytes("key").getLong();
                 if (!spans.containsKey(traceId)) {
-                    spans.put(traceId, new ArrayList<>());
+                    spans.put(traceId, new ArrayList<ByteBuffer>());
                 }
                 spans.get(traceId).add(row.getBytes("value"));
             }
