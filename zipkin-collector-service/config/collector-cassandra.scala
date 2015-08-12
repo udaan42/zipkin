@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-import com.datastax.driver.core.Cluster;
-import com.datastax.driver.core.SocketOptions;
+import com.datastax.driver.core.Cluster
+import com.datastax.driver.core.SocketOptions
 import com.twitter.zipkin.builder.Scribe
 import com.twitter.zipkin.cassandra
 import com.twitter.zipkin.collector.builder.CollectorServiceBuilder
 import com.twitter.zipkin.storage.Store
 import org.twitter.zipkin.storage.cassandra.ZipkinRetryPolicy
-
 
 val cluster = Cluster.builder()
   .addContactPoint("localhost")
@@ -29,13 +28,11 @@ val cluster = Cluster.builder()
   .withRetryPolicy(ZipkinRetryPolicy.INSTANCE)
   .build()
 
-val keyspaceBuilder = cassandra.Keyspace.static(nodes = Set("localhost"))
-
-val cassandraBuilder = Store.Builder(
-  cassandra.StorageBuilder(cluster),
-  cassandra.IndexBuilder(keyspaceBuilder),
-  cassandra.AggregatesBuilder(keyspaceBuilder)
+val storageWithIndexBuilder = cassandra.StorageWithIndexBuilder(cluster)
+val storeBuilder = Store.Builder(
+  storageWithIndexBuilder,
+  storageWithIndexBuilder
 )
 
 CollectorServiceBuilder(Scribe.Interface(categories = Set("zipkin")))
-  .writeTo(cassandraBuilder)
+  .writeTo(storeBuilder)

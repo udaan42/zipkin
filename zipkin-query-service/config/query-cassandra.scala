@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import com.datastax.driver.core.Cluster;
-import com.datastax.driver.core.SocketOptions;
+import com.datastax.driver.core.Cluster
+import com.datastax.driver.core.SocketOptions
 import com.twitter.zipkin.builder.QueryServiceBuilder
 import com.twitter.zipkin.cassandra
 import com.twitter.zipkin.storage.Store
@@ -27,11 +27,10 @@ val cluster = Cluster.builder()
   .withRetryPolicy(ZipkinRetryPolicy.INSTANCE)
   .build()
 
-val keyspaceBuilder = cassandra.Keyspace.static()
-
+val storageWithIndexBuilder = cassandra.StorageWithIndexBuilder(cluster)
 val storeBuilder = Store.Builder(
-  cassandra.StorageBuilder(cluster),
-  cassandra.IndexBuilder(keyspaceBuilder),
-  cassandra.AggregatesBuilder(keyspaceBuilder))
+  storageWithIndexBuilder,
+  storageWithIndexBuilder
+)
 
 QueryServiceBuilder(storeBuilder)

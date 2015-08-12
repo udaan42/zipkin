@@ -28,6 +28,7 @@ import com.twitter.zipkin.thriftscala.{Span => ThriftSpan}
 import com.twitter.zipkin.storage.{TraceIdDuration, IndexedTraceId, SpanStore}
 import com.twitter.zipkin.util.Util
 import java.nio.ByteBuffer
+import org.twitter.zipkin.storage.cassandra.Repository
 import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
 
@@ -52,7 +53,7 @@ object CassandraSpanStoreDefaults {
 }
 
 class CassandraSpanStore(
-  repository: org.twitter.zipkin.storage.cassandra.Repository,
+  repository: Repository,
   stats: StatsReceiver = DefaultStatsReceiver.scope("CassandraSpanStore"),
   cfs: ZipkinColumnFamilyNames = CassandraSpanStoreDefaults.ColumnFamilyNames,
   spanTtl: Duration = CassandraSpanStoreDefaults.SpanTtl,
