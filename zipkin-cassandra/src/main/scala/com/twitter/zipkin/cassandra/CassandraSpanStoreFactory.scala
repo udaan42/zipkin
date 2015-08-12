@@ -15,22 +15,22 @@
  */
 package com.twitter.zipkin.cassandra
 
-import com.datastax.driver.core.Cluster;
+import com.datastax.driver.core.Cluster
+import com.google.common.net.HostAndPort
 import com.twitter.app.App
-import com.twitter.conversions.time._
-import com.twitter.finagle.{Addr, Name, Resolver}
 import com.twitter.finagle.stats.{DefaultStatsReceiver, StatsReceiver}
-import com.twitter.zipkin.thriftscala.{Span => ThriftSpan}
 import com.twitter.zipkin.storage.cassandra._
+import org.twitter.zipkin.storage.cassandra.Repository
 
-trait CassandraSpanStoreFactory { self: App =>
+trait CassandraSpanStoreFactory {self: App =>
+
   import com.twitter.zipkin.storage.cassandra.{CassandraSpanStoreDefaults => Defaults}
 
   val cassieColumnFamilies = Defaults.ColumnFamilyNames
   val cassieSpanCodec = Defaults.SpanCodec
 
   val keyspace = flag("zipkin.store.cassandra.keyspace", Defaults.KeyspaceName, "name of the keyspace to use")
-  val cassieDest = flag("zipkin.store.cassandra.dest", "localhost:9160", "dest of the cassandra cluster")
+  val cassandraDest = flag("zipkin.store.cassandra.dest", "localhost:9160", "dest of the cassandra cluster")
 
   val cassieSpanTtl = flag("zipkin.store.cassie.spanTTL", Defaults.SpanTtl, "length of time cassandra should store spans")
   val cassieIndexTtl = flag("zipkin.store.cassie.indexTTL", Defaults.IndexTtl, "length of time cassandra should store span indexes")
@@ -39,14 +39,9 @@ trait CassandraSpanStoreFactory { self: App =>
   val cassieMaxTraceCols = flag("zipkin.store.cassie.maxTraceCols", Defaults.MaxTraceCols, "max number of spans to return from a query")
   val cassieReadBatchSize = flag("zipkin.store.cassie.readBatchSize", Defaults.ReadBatchSize, "max number of rows per query")
 
-  def newCassandraStore(
-    cluster: Cluster,
-    stats: StatsReceiver = DefaultStatsReceiver.scope("cassie")
-  ): CassandraSpanStore = {
-
-    val repository = new org.twitter.zipkin.storage.cassandra.Repository(keyspace(), cluster)
-
-    // @fixme ... add all the options
+  def newCassandraStore(stats: StatsReceiver = DefaultStatsReceiver.scope("cassie")): CassandraSpanStore = {
+    val clusterBuilder = addContactPoint(Cluster.builder())
+    val repository = new Repository(keyspace(), clusterBuilder.build())
 
     new CassandraSpanStore(
       repository,
@@ -58,5 +53,12 @@ trait CassandraSpanStoreFactory { self: App =>
       cassieMaxTraceCols(),
       cassieReadBatchSize(),
       cassieSpanCodec)
+  }
+
+  def addContactPoint(builder: Cluster.Builder): Cluster.Builder = {
+    val contactPoint = HostAndPort.fromString(cassandraDest())
+
+    builder.addContactPoint(contactPoint.getHostText)
+      .withPort(contactPoint.getPortOrDefault(9160))
   }
 }
