@@ -1,15 +1,18 @@
 package com.twitter.zipkin.storage.cassandra
 
 import com.datastax.driver.core.Cluster
-import com.twitter.app.App
-import com.twitter.zipkin.cassandra.CassandraSpanStoreFactory
 import com.twitter.zipkin.storage.SpanStoreSpec
 import java.util.Collections
 import org.cassandraunit.CassandraCQLUnit
 import org.cassandraunit.dataset.CQLDataSet
 import org.junit.ClassRule
+import org.twitter.zipkin.storage.cassandra.Repository
 
 object CassandraSpanStoreSpec {
+  val keyspace = "test_zipkin"
+  // Defer shared connection to the cluster
+  lazy val cluster = Cluster.builder().addContactPoint("127.0.0.1").withPort(9142).build()
+
   // Avoid conflicts with thrift 0.5
   System.setProperty("cassandra.start_rpc", "false")
 
@@ -17,7 +20,7 @@ object CassandraSpanStoreSpec {
   @ClassRule def cassandra = new CassandraCQLUnit(new CQLDataSet() {
     override def isKeyspaceDeletion = true
 
-    override def getKeyspaceName = "test_zipkin"
+    override def getKeyspaceName = keyspace
 
     override def isKeyspaceCreation = true
 
@@ -27,15 +30,9 @@ object CassandraSpanStoreSpec {
 
 class CassandraSpanStoreSpec extends SpanStoreSpec {
 
-  object TestStore extends App with CassandraSpanStoreFactory
+  import CassandraSpanStoreSpec._
 
-  // unused currently
-  TestStore.main(Array("-zipkin.store.cassandra.dest", "127.0.0.1:9142", "-zipkin.store.cassandra.keyspace", "test_zipkin"))
-  override lazy val store = TestStore.newCassandraStore(
-    Cluster.builder().addContactPoint("127.0.0.1").withPort(9142).build()
-  )
+  override lazy val store = new CassandraSpanStore(new Repository(keyspace, cluster))
 
-  override def clear = {
-    Cluster.builder().addContactPoint("127.0.0.1").withPort(9142).build().connect().execute("DROP KEYSPACE test_zipkin")
-  }
+  override def clear = cluster.connect().execute("DROP KEYSPACE " + keyspace)
 }
